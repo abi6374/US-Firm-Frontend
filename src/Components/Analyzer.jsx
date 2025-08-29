@@ -1,4 +1,5 @@
 import { useState } from "react";
+import api from "../axios";
 import { FaSearch } from "react-icons/fa";
 
 export default function Analyzer() {
@@ -6,12 +7,26 @@ export default function Analyzer() {
   const [objective, setObjective] = useState("");
   const [analysis, setAnalysis] = useState("");
 
-  // Dummy handler, replace with API call
-  const handleSubmit = (e) => {
+  // Professional API integration
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setAnalysis(
-      `Analysis of "${text.slice(0, 60)}..." (objective: "${objective}")`
-    );
+    setAnalysis("");
+    try {
+      const res = await api.post("/analyze", {
+        task: "contract_clause_detection",
+        text,
+        objective,
+      });
+      console.log(res.data);
+      if (res.data.error) {
+        setAnalysis(`Error: ${res.data.error}`);
+      } else {
+        setAnalysis(JSON.stringify(res.data, null, 2));
+      }
+    } catch (err) {
+      console.error(err)
+      setAnalysis("Server error. Please try again later.");
+    }
   };
 
   return (

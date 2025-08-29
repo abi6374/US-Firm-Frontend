@@ -1,10 +1,11 @@
 import { useState } from "react";
+import api from "../axios";
 import {
   FaFilePdf,
   FaDownload,
   FaHistory,
   FaRegLightbulb,
-} from "react-icons/fa";
+} from "react-icons/fa"; 
 import { MdOutlineSummarize } from "react-icons/md";
 
 export default function Summarization() {
@@ -20,22 +21,31 @@ export default function Summarization() {
   const [answer, setAnswer] = useState("");
   const [answerLoading, setAnswerLoading] = useState(false);
 
-  // Dummy handler, replace with API call
-  const handleSubmit = (e) => {
+  // Professional API integration
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      const newSummary = `Summary (${length}): "${text.slice(
-        0,
-        60
-      )}..." (focus: "${focus}")`;
-      setSummary(newSummary);
-      setHistory([
-        { summary: newSummary, time: new Date().toLocaleString() },
-        ...history,
-      ]);
-      setLoading(false);
-    }, 1200);
+    setSummary("");
+    try {
+      const res = await api.post("/summarize", {
+        text,
+        focus,
+        length,
+      });
+      if (res.data.summary) {
+        console.log(res.data.summary);
+        setSummary(res.data.summary);
+        setHistory([
+          { summary: res.data.summary, time: new Date().toLocaleString() },
+          ...history,
+        ]);
+      } else {
+        setSummary("No summary returned.");
+      }
+    } catch (err) {
+      setSummary("Server error. Please try again later.");
+    }
+    setLoading(false);
   };
 
   const handlePdfUpload = (e) => {

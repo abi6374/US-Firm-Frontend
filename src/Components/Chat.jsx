@@ -12,6 +12,7 @@ import {
   FaUserCircle,
   FaSpinner,
 } from "react-icons/fa";
+import api from "../axios";
 
 function formatTime(date) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -60,15 +61,7 @@ export default function Chat() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, typing]);
 
-  // Dummy API simulation
-  const getAIReply = (msg, ctx) =>
-    new Promise((resolve) =>
-      setTimeout(
-        () => resolve(`AI Reply: "${msg}"${ctx ? ` (context: "${ctx}")` : ""}`),
-        1200
-      )
-    );
-
+  // Professional API integration
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!message.trim()) return;
@@ -83,16 +76,34 @@ export default function Chat() {
     setContext("");
     setTyping(true);
     setLoading(true);
-    const aiText = await getAIReply(userMsg.text, userMsg.context);
-    setChat((prev) => [
-      ...prev,
-      {
-        sender: "ai",
-        text: aiText,
-        time: new Date(),
-        feedback: null,
-      },
-    ]);
+    try {
+      const res = await api.post("/analyze", {
+        task: "faq_chat",
+        text: userMsg.text,
+        context: userMsg.context,
+      });
+      console.log(res)
+      setChat((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: res.data.response || "No response received.",
+          time: new Date(),
+          feedback: null,
+        },
+      ]);
+    } catch (err) {
+      console.error(err);
+      setChat((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: "Server error. Please try again later.",
+          time: new Date(),
+          feedback: null,
+        },
+      ]);
+    }
     setTyping(false);
     setLoading(false);
   };

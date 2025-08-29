@@ -1,4 +1,5 @@
 import { useState } from "react";
+import api from "../axios";
 import { FaQuoteRight, FaCopy, FaHistory } from "react-icons/fa";
 
 export default function Citation() {
@@ -7,19 +8,29 @@ export default function Citation() {
   const [history, setHistory] = useState([]);
   const [copiedIdx, setCopiedIdx] = useState(null);
 
-  // Dummy handler, replace with API call
-  const handleSubmit = (e) => {
+  // Professional API integration
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newCitations = [
-      "Case Law: Roe v. Wade, 410 U.S. 113 (1973)",
-      "Statute: GDPR Article 5",
-      "Regulation: SEC Rule 10b-5",
-    ];
-    setCitations(newCitations);
-    setHistory([
-      { text, citations: newCitations, time: new Date().toLocaleString() },
-      ...history,
-    ]);
+    setCitations([]);
+    try {
+      const res = await api.post("/analyze", {
+        task: "citation_verification",
+        text,
+      });
+      if (res.data.error) {
+        setCitations([`Error: ${res.data.error}`]);
+      } else if (res.data.citations) {
+        setCitations(res.data.citations.map(c => `${c.citation} (${c.valid ? 'Valid' : 'Invalid'}) ${c.source_url || ''}`));
+      } else {
+        setCitations(["No citations found."]);
+      }
+      setHistory([
+        { text, citations: res.data.citations || [], time: new Date().toLocaleString() },
+        ...history,
+      ]);
+    } catch (err) {
+      setCitations(["Server error. Please try again later."]);
+    }
   };
 
   const handleCopy = (citation, idx) => {
