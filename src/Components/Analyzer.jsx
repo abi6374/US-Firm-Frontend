@@ -12,7 +12,7 @@ export default function Analyzer() {
     e.preventDefault();
     setAnalysis("");
     try {
-      const res = await api.post("/analyze", {
+      const res = await api.post("/clause_detection", {
         task: "contract_clause_detection",
         text,
         objective,
