@@ -54,12 +54,19 @@ export default function ChatPage() {
   const [currentChatId, setCurrentChatId] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const isFirstMount = useRef(true);
   const recognitionRef = useRef(null);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll on new messages (skip initial load)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typing]);
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    if (messages.length) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   // Load chat history from localStorage
   useEffect(() => {
@@ -287,7 +294,7 @@ export default function ChatPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Enhanced Header */}
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white shadow-2xl relative overflow-hidden">
         <div className="absolute inset-0 bg-black/10"></div>

@@ -42,10 +42,17 @@ export default function CitationPage() {
   const [sortBy, setSortBy] = useState("date");
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const isFirstMount = useRef(true);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll on new history items (skip initial load)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    if (chatHistory.length) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [chatHistory]);
 
   // Load chat history from localStorage

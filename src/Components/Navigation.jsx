@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FaBalanceScale, FaBars, FaTimes, FaUserTie, FaPhone, FaEnvelope } from 'react-icons/fa';
+import { FaBalanceScale, FaBars, FaTimes, FaUserTie, FaPhone, FaEnvelope, FaUser, FaSignOutAlt, FaSignInAlt } from 'react-icons/fa';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const navItems = [
     { name: 'Home', href: '/' },
@@ -16,6 +19,12 @@ export default function Navigation() {
   const isActive = (href) => {
     if (href === '/') return location.pathname === '/';
     return location.pathname.includes(href.replace('/#', ''));
+  };
+
+  const handleLogout = () => {
+    logout();
+    setIsUserMenuOpen(false);
+    setIsMenuOpen(false);
   };
 
   return (
@@ -51,12 +60,59 @@ export default function Navigation() {
                 }`}></span>
               </Link>
             ))}
-            <Link 
-              to="/chat"
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-2 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-            >
-              Get Started
-            </Link>
+            
+            {/* Authentication Section */}
+            {user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-2 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                >
+                  <FaUser className="text-sm" />
+                  <span>{user.full_name?.split(' ')[0] || 'User'}</span>
+                </button>
+                
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-semibold text-gray-900">{user.full_name}</p>
+                      <p className="text-xs text-gray-500">{user.email}</p>
+                    </div>
+                    <Link
+                      to="/chat"
+                      className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-300"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <FaBalanceScale className="text-xs" />
+                      <span>AI Tools</span>
+                    </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors duration-300"
+                    >
+                      <FaSignOutAlt className="text-xs" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center space-x-3">
+                <Link 
+                  to="/login"
+                  className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 font-medium transition-colors duration-300"
+                >
+                  <FaSignInAlt className="text-sm" />
+                  <span>Sign In</span>
+                </Link>
+                <Link 
+                  to="/signup"
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-2 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -88,13 +144,48 @@ export default function Navigation() {
                   {item.name}
                 </Link>
               ))}
-              <Link 
-                to="/chat"
-                className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-full font-semibold shadow-lg transition-all duration-300 mt-4 text-center"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Get Started
-              </Link>
+              
+              {/* Mobile Authentication */}
+              {user ? (
+                <div className="pt-4 border-t border-gray-200">
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-gray-900">{user.full_name}</p>
+                    <p className="text-xs text-gray-500">{user.email}</p>
+                  </div>
+                  <Link 
+                    to="/chat"
+                    className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-full font-semibold shadow-lg transition-all duration-300 mb-3 text-center"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    AI Tools
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center justify-center space-x-2 w-full text-gray-700 hover:text-red-600 font-medium py-2 transition-colors duration-300"
+                  >
+                    <FaSignOutAlt className="text-sm" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-4 border-t border-gray-200 space-y-3">
+                  <Link 
+                    to="/login"
+                    className="flex items-center justify-center space-x-2 w-full text-gray-700 hover:text-blue-600 font-medium py-2 transition-colors duration-300"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <FaSignInAlt className="text-sm" />
+                    <span>Sign In</span>
+                  </Link>
+                  <Link 
+                    to="/signup"
+                    className="block w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-full font-semibold shadow-lg transition-all duration-300 text-center"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Get Started
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}

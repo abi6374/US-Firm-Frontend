@@ -60,10 +60,17 @@ export default function Chat() {
   const [isRecording, setIsRecording] = useState(false);
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const isFirstMount = useRef(true);
 
-  // Auto-scroll to latest message
+  // Auto-scroll on new messages (skip initial load)
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    if (chat.length) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [chat, typing]);
 
   // Auto-resize textarea

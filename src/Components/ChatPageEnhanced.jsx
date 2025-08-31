@@ -55,10 +55,17 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
+  const isFirstMount = useRef(true);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll on new messages (skip initial load)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    if (messages.length) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, typing]);
 
   // Load chat history from localStorage
