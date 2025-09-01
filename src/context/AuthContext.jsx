@@ -55,12 +55,11 @@ export const AuthProvider = ({ children }) => {
         password
       });
       
-      const { access_token, token_type } = response.data;
+      const { access_token, token_type, user } = response.data;
       localStorage.setItem('access_token', access_token);
       
-      // Get user data
-      const userResponse = await api.get('/auth/me');
-      setUser(userResponse.data);
+      // Set user data from login response
+      setUser(user);
       setIsAuthenticated(true);
       
       return { success: true };
@@ -75,7 +74,14 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await api.post('/auth/register', userData);
+      // Map frontend field names to backend expected names
+      const registerData = {
+        email: userData.email,
+        full_name: userData.fullName, // Map fullName to full_name
+        password: userData.password
+      };
+      
+      const response = await api.post('/auth/register', registerData);
       
       // Auto login after registration
       const loginResult = await login(userData.email, userData.password);

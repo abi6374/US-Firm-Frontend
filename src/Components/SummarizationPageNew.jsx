@@ -48,8 +48,6 @@ export default function SummarizationPage() {
   const [ragResponse, setRagResponse] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [showChatInterface, setShowChatInterface] = useState(false);
   const fileInputRef = useRef(null);
 
   // Load data from localStorage and server
@@ -67,10 +65,10 @@ export default function SummarizationPage() {
 
   const loadUserDocuments = async () => {
     try {
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem("token");
       if (!token) return;
 
-      const response = await api.get("/documents", {
+      const response = await api.get("/api/v1/documents", {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUploadedDocuments(response.data);
@@ -133,21 +131,11 @@ export default function SummarizationPage() {
     setUploadProgress(0);
 
     try {
-      const token = localStorage.getItem("access_token");
-      
-      // Debug: Check if user is logged in
-      if (!token) {
-        setSummary("Error: You need to login first to upload documents.");
-        setLoading(false);
-        return;
-      }
-
+      const token = localStorage.getItem("token");
       const formData = new FormData();
       formData.append("file", file);
 
-      console.log("Attempting upload with token:", token ? "Token exists" : "No token");
-
-      const response = await api.post("/documents/upload", formData, {
+      const response = await api.post("/api/v1/documents/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
           Authorization: `Bearer ${token}`
@@ -168,12 +156,10 @@ export default function SummarizationPage() {
         // Show success message
         setSummary("Document uploaded successfully! You can now use it for Q&A or summarization.");
         
-        // Always upload to RAG server for Q&A capabilities
-        await uploadToRagServer();
-        
-        // Show chat interface for Q&A
-        setShowChatInterface(true);
-        setRagMode(true);
+        // If in RAG mode, also upload to external server
+        if (ragMode) {
+          await uploadToRagServer();
+        }
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -183,94 +169,20 @@ export default function SummarizationPage() {
     }
   };
 
-  // Test RAG server connectivity
-  const testRagServerConnection = async () => {
-    try {
-      const response = await fetch("https://akilesh-home-server.tailb6b6c7.ts.net/abinivas-api/health", {
-        method: "GET",
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      });
-      console.log("RAG Server Health Status:", response.status);
-      if (response.ok) {
-        const data = await response.json();
-        console.log("Health check response:", data);
-        return data.status === "Running properly";
-      }
-      return false;
-    } catch (error) {
-      console.error("RAG Server Connection Test Failed:", error);
-      return false;
-    }
-  };
-
   const uploadToRagServer = async () => {
     try {
-      // Use 'file' field name as per server expectation
       const formData = new FormData();
-      formData.append("file", file); // Server expects 'file' field
+      formData.append("file", file);
       
-      console.log("Uploading file:", file.name, "Size:", file.size, "Type:", file.type);
-      
-      // Try local backend first (port 8001 with auth), then other options
-      const ragEndpoints = [
-        "http://127.0.0.1:8001/upload_pdf", // Local main backend
-        // "http://127.0.0.1:8002/upload_pdf" // Local RAG server on port 8002
-        // "https://akilesh-home-server.tailb6b6c7.ts.net/abinivas-api/upload_pdf" // External server
-      ];
-      
-      let response = null;
-      let data = null;
-      let success = false;
-      
-      for (const endpoint of ragEndpoints) {
-        try {
-          console.log(`Trying endpoint: ${endpoint}`);
-          
-          // Prepare headers for authentication (needed for port 8001)
-          const headers = {};
-          if (endpoint.includes('127.0.0.1:8001')) {
-            const token = localStorage.getItem("access_token");
-            if (token) {
-              headers['Authorization'] = `Bearer ${token}`;
-            }
-          }
-          
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: headers,
-            body: formData,
-            signal: AbortSignal.timeout(30000) // 30 second timeout
-          });
+      const response = await api.post("/api/v1/rag/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
 
-          data = await response.json(); // Server returns JSON response
-          console.log(`RAG Server Response from ${endpoint}:`, response.status, data);
-
-          if (response.ok) {
-            success = true;
-            setSummary(prev => prev + `\n\nDocument uploaded to RAG server successfully! Indexed ${data.chunks} chunks. You can now ask questions about this document.`);
-            setRagMode(true); // Automatically switch to Q&A mode
-            setShowChatInterface(true); // Show chat interface
-            break; // Success, exit loop
-          }
-        } catch (error) {
-          console.log(`Failed to connect to ${endpoint}:`, error.message);
-          continue; // Try next endpoint
-        }
-      }
-      
-      if (!success) {
-        console.error("All RAG upload endpoints failed");
-        setSummary(prev => prev + `\n\nNote: RAG server upload failed. Last error: ${data?.detail || data?.message || 'All endpoints unreachable'}. Document is still saved locally.`);
+      if (response.data.success) {
+        setSummary(prev => prev + "\n\nDocument also uploaded to RAG server for Q&A capabilities.");
       }
     } catch (error) {
       console.error("RAG upload error:", error);
-      if (error.name === 'TimeoutError') {
-        setSummary(prev => prev + "\n\nNote: RAG server connection timed out, but document is still saved locally.");
-      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setSummary(prev => prev + "\n\nNote: RAG server is unreachable, but document is still saved locally.");
-      } else {
-        setSummary(prev => prev + `\n\nNote: RAG server upload failed (${error.message}), but document is still saved locally.`);
-      }
     }
   };
 
@@ -285,12 +197,12 @@ export default function SummarizationPage() {
         await uploadDocument();
       } else if (uploadMethod === "text" && text.trim()) {
         // Summarize text
-        const response = await api.post("/documents/summarize", {
+        const response = await api.post("/api/v1/documents/summarize", {
           text: text,
           summary_type: summaryType
         }, {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("access_token")}`
+            Authorization: `Bearer ${localStorage.getItem("token")}`
           }
         });
 
@@ -315,80 +227,16 @@ export default function SummarizationPage() {
     setLoading(true);
     
     try {
-      // Try local backend first (port 8001 with auth), then other options
-      const ragEndpoints = [
-        "http://127.0.0.1:8001/query", // Local main backend
-        "http://127.0.0.1:8002/query", // Local RAG server on port 8002
-        "https://akilesh-home-server.tailb6b6c7.ts.net/abinivas-api/query" // External server
-      ];
-      
-      let response = null;
-      let data = null;
-      let success = false;
-      
-      for (const endpoint of ragEndpoints) {
-        try {
-          console.log(`Trying query endpoint: ${endpoint}`);
-          
-          // Prepare headers for authentication (needed for port 8001)
-          const headers = {
-            "Content-Type": "application/json"
-          };
-          if (endpoint.includes('127.0.0.1:8001')) {
-            const token = localStorage.getItem("access_token");
-            if (token) {
-              headers['Authorization'] = `Bearer ${token}`;
-            }
-          }
-          
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: headers,
-            body: JSON.stringify({
-              question: ragQuery, // Server expects 'question' field, not 'query'
-              provider: "groq" // Use default provider
-            }),
-            signal: AbortSignal.timeout(60000) // 60 second timeout for queries
-          });
+      const response = await api.post("/api/v1/rag/query", {
+        query: ragQuery
+      });
 
-          data = await response.json();
-          console.log(`RAG Query Response from ${endpoint}:`, response.status, data);
-
-          if (response.ok && data.answer) { // Server returns 'answer' field, not 'response'
-            const newMessage = {
-              id: Date.now(),
-              question: ragQuery,
-              answer: data.answer, // Use 'answer' field from server response
-              timestamp: new Date()
-            };
-            
-            setChatHistory(prev => [...prev, newMessage]);
-            setRagResponse(data.answer); // Use 'answer' field
-            setRagQuery(""); // Clear input after sending
-            
-            // Add to general history
-            addToHistory(ragQuery, { summary: data.answer }, "rag_query", "pdf");
-            success = true;
-            break; // Success, exit loop
-          }
-        } catch (error) {
-          console.log(`Failed to query ${endpoint}:`, error.message);
-          continue; // Try next endpoint
-        }
-      }
-      
-      if (!success) {
-        setRagResponse(`Query failed: ${data?.detail || data?.error || data?.message || "All RAG endpoints unreachable"}`);
+      if (response.data.response) {
+        setRagResponse(response.data.response);
       }
     } catch (error) {
       console.error("RAG query error:", error);
-      if (error.name === 'TimeoutError') {
-        setRagResponse("Query timed out. The server took too long to respond.");
-      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        setRagResponse("Unable to connect to RAG server. Please check your connection.");
-      } else {
-        setRagResponse(`Query failed: ${error.message}`);
-      }
+      setRagResponse(`Query failed: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);
     }
@@ -396,8 +244,8 @@ export default function SummarizationPage() {
 
   const deleteDocument = async (docId) => {
     try {
-      const token = localStorage.getItem("access_token");
-      await api.delete(`/documents/${docId}`, {
+      const token = localStorage.getItem("token");
+      await api.delete(`/api/v1/documents/${docId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -430,7 +278,7 @@ export default function SummarizationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
@@ -484,16 +332,16 @@ export default function SummarizationPage() {
         </div>
       </header>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-6">
             
             {/* Mode Selector */}
-            <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white flex items-center space-x-2">
+            <div className="backdrop-blur-md bg-white/5 rounded-2xl p-6 border border-white/10 shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white flex items-center space-x-2">
                   <FaGraduationCap className="text-purple-400" />
                   <span>Analysis Mode</span>
                 </h2>
@@ -549,7 +397,7 @@ export default function SummarizationPage() {
                     <textarea
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      className="w-full h-32 px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
+                      className="w-full h-40 px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none"
                       placeholder="Paste your legal document, contract, or text here..."
                       required
                     />
@@ -583,7 +431,7 @@ export default function SummarizationPage() {
               {uploadMethod === "file" && (
                 <div className="space-y-4">
                   <div
-                    className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all ${
+                    className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
                       dragActive
                         ? "border-purple-400 bg-purple-500/10"
                         : "border-white/30 hover:border-white/50"
@@ -677,115 +525,9 @@ export default function SummarizationPage() {
               )}
             </div>
 
-            {/* Chat Interface for Document Q&A */}
-            {(ragMode && showChatInterface) && (
-              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
-                    <FaRobot className="text-blue-400" />
-                    <span>AI Document Chat</span>
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setChatHistory([]);
-                      setRagResponse("");
-                    }}
-                    className="text-sm text-white/60 hover:text-white transition-colors bg-white/10 px-3 py-1 rounded"
-                  >
-                    Clear Chat
-                  </button>
-                </div>
-
-                {/* Chat History */}
-                <div className="max-h-80 overflow-y-auto mb-4 space-y-3 bg-white/5 rounded-lg p-4 border border-white/10">
-                  {chatHistory.length === 0 ? (
-                    <div className="text-center text-white/60 py-8">
-                      <FaQuoteLeft className="mx-auto text-3xl mb-3 opacity-50" />
-                      <p>Start asking questions about your uploaded document!</p>
-                      <p className="text-sm mt-2">Try asking: "What is this document about?" or "Summarize the key points"</p>
-                    </div>
-                  ) : (
-                    chatHistory.map((chat) => (
-                      <div key={chat.id} className="space-y-3">
-                        {/* User Question */}
-                        <div className="flex justify-end">
-                          <div className="bg-blue-500/20 backdrop-blur-sm border border-blue-400/30 rounded-lg px-4 py-2 max-w-[80%]">
-                            <p className="text-white/90 text-sm">{chat.question}</p>
-                            <span className="text-xs text-blue-200/60">
-                              {new Date(chat.timestamp).toLocaleTimeString()}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* AI Response */}
-                        <div className="flex justify-start">
-                          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-2 max-w-[80%]">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <FaRobot className="text-purple-400 text-sm" />
-                              <span className="text-xs text-white/60">AI Assistant</span>
-                            </div>
-                            <p className="text-white/90 text-sm whitespace-pre-wrap leading-relaxed">{chat.answer}</p>
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-xs text-white/40">
-                                {new Date(chat.timestamp).toLocaleTimeString()}
-                              </span>
-                              <button
-                                onClick={() => copyToClipboard(chat.answer)}
-                                className="text-white/40 hover:text-white/80 transition-colors"
-                                title="Copy response"
-                              >
-                                <FaCopy className="text-xs" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  
-                  {/* Loading indicator */}
-                  {loading && (
-                    <div className="flex justify-start">
-                      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-2">
-                        <div className="flex items-center space-x-2">
-                          <FaSpinner className="animate-spin text-purple-400" />
-                          <span className="text-white/80 text-sm">AI is thinking...</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chat Input */}
-                <form onSubmit={handleRagQuery} className="flex space-x-2">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={ragQuery}
-                      onChange={(e) => setRagQuery(e.target.value)}
-                      className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                      placeholder="Ask a question about your document..."
-                      disabled={loading}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading || !ragQuery.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 text-white font-medium rounded-lg transition-all duration-200 flex items-center space-x-2 shadow-lg disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <FaSpinner className="animate-spin" />
-                    ) : (
-                      <FaSearch />
-                    )}
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {/* Simple RAG Query for when not in chat mode */}
-            {(ragMode && !showChatInterface) && (
-              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
+            {/* RAG Query Section */}
+            {ragMode && (
+              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-6 border border-white/10 shadow-2xl">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
                   <FaQuoteLeft className="text-blue-400" />
                   <span>Document Q&A</span>
@@ -796,7 +538,7 @@ export default function SummarizationPage() {
                     <textarea
                       value={ragQuery}
                       onChange={(e) => setRagQuery(e.target.value)}
-                      className="w-full h-20 px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
+                      className="w-full h-24 px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
                       placeholder="Ask a question about your uploaded documents..."
                       required
                     />
@@ -846,9 +588,9 @@ export default function SummarizationPage() {
 
             {/* Analysis Results */}
             {(summary || keyPoints.length > 0) && (
-              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-6 border border-white/10 shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold text-white flex items-center space-x-2">
                     <FaChartBar className="text-green-400" />
                     <span>Analysis Results</span>
                   </h3>
@@ -926,10 +668,10 @@ export default function SummarizationPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div className="space-y-6">
             
             {/* Uploaded Documents */}
-            <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
+            <div className="backdrop-blur-md bg-white/5 rounded-2xl p-6 border border-white/10 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
                   <FaShieldAlt className="text-blue-400" />
@@ -940,7 +682,7 @@ export default function SummarizationPage() {
                 </span>
               </div>
 
-              <div className="space-y-3 max-h-48 overflow-y-auto">
+              <div className="space-y-3 max-h-60 overflow-y-auto">
                 {uploadedDocuments.length > 0 ? (
                   uploadedDocuments.map((doc) => (
                     <div key={doc.id} className="flex items-center space-x-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-colors">
@@ -970,7 +712,7 @@ export default function SummarizationPage() {
 
             {/* Analysis History */}
             {showHistory && (
-              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
+              <div className="backdrop-blur-md bg-white/5 rounded-2xl p-6 border border-white/10 shadow-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
                     <FaHistory className="text-purple-400" />
@@ -987,7 +729,7 @@ export default function SummarizationPage() {
                   </button>
                 </div>
 
-                <div className="space-y-3 max-h-48 overflow-y-auto">
+                <div className="space-y-3 max-h-60 overflow-y-auto">
                   {summaryHistory.length > 0 ? (
                     summaryHistory.slice(0, 5).map((item) => (
                       <div key={item.id} className="p-3 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-colors cursor-pointer"
@@ -1016,7 +758,7 @@ export default function SummarizationPage() {
             )}
 
             {/* Quick Actions */}
-            <div className="backdrop-blur-md bg-white/5 rounded-2xl p-4 border border-white/10 shadow-2xl">
+            <div className="backdrop-blur-md bg-white/5 rounded-2xl p-6 border border-white/10 shadow-2xl">
               <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
                 <FaCog className="text-indigo-400" />
                 <span>Quick Actions</span>
@@ -1029,52 +771,6 @@ export default function SummarizationPage() {
                 >
                   <FaEye className="text-green-400" />
                   <span>Refresh Documents</span>
-                </button>
-                
-                <button
-                  onClick={async () => {
-                    setSummary("Testing RAG server connection...");
-                    const isConnected = await testRagServerConnection();
-                    if (isConnected) {
-                      setSummary("RAG server is reachable and working!");
-                    } else {
-                      setSummary("RAG server is not reachable. Please check the server status.");
-                    }
-                  }}
-                  className="w-full p-3 text-left bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white/80 hover:text-white flex items-center space-x-3"
-                >
-                  <FaRobot className="text-blue-400" />
-                  <span>Test RAG Server</span>
-                </button>
-                
-                <button
-                  onClick={async () => {
-                    setSummary("Checking RAG API documentation...");
-                    try {
-                      // Try to access the docs endpoint
-                      const response = await fetch("https://akilesh-home-server.tailb6b6c7.ts.net/abinivas-api/docs", {
-                        method: "GET",
-                        signal: AbortSignal.timeout(10000)
-                      });
-                      console.log("API Docs Response:", response.status);
-                      setSummary(`API documentation status: ${response.status}. Check browser console for details.`);
-                      
-                      // Also try the OpenAPI spec
-                      const openApiResponse = await fetch("https://akilesh-home-server.tailb6b6c7.ts.net/abinivas-api/openapi.json", {
-                        method: "GET",
-                        signal: AbortSignal.timeout(10000)
-                      });
-                      const openApiData = await openApiResponse.json();
-                      console.log("OpenAPI Spec:", openApiData);
-                    } catch (error) {
-                      console.error("API docs check failed:", error);
-                      setSummary("Could not access API documentation. Check console for details.");
-                    }
-                  }}
-                  className="w-full p-3 text-left bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white/80 hover:text-white flex items-center space-x-3"
-                >
-                  <FaSearch className="text-yellow-400" />
-                  <span>Check API Docs</span>
                 </button>
                 
                 <button
